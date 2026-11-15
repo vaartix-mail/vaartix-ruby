@@ -1,0 +1,25 @@
+name: Publish to RubyGems
+on:
+  release:
+    types: [published]
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: rubygems
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - name: Check the tag matches the version
+        run: test "${GITHUB_REF_NAME#v}" = "$(ruby -Ilib -e 'require "vaartix/version"; print Vaartix::VERSION')"
+      - run: bundle exec rake test
+      - uses: rubygems/configure-rubygems-credentials@v1.0.0
+      - run: gem build vaartix.gemspec
+      - run: gem push "vaartix-${GITHUB_REF_NAME#v}.gem"
