@@ -4,7 +4,6 @@ require "json"
 require "net/http"
 require "uri"
 require "openssl"
-require "base64"
 require_relative "vaartix/version"
 
 # The official Ruby client for Vaartix, the transactional email API built in India.
@@ -212,13 +211,13 @@ module Vaartix
     raise WebhookVerificationError, "The webhook timestamp is too old or in the future." if sent.nil? || (now - sent).abs > tolerance
     raise WebhookVerificationError, "The secret should start with whsec_." unless secret.to_s.start_with?("whsec_")
 
-    key = Base64.strict_decode64(secret.delete_prefix("whsec_"))
+    key = secret.delete_prefix("whsec_").unpack1("m0")
     expected = OpenSSL::HMAC.digest("SHA256", key, "#{id}.#{timestamp}.#{payload}")
     valid = signatures.split(" ").any? do |entry|
       version, signature = entry.split(",", 2)
       next false unless version == "v1" && signature
 
-      given = Base64.decode64(signature)
+      given = signature.unpack1("m")
       given.bytesize == expected.bytesize && OpenSSL.fixed_length_secure_compare(given, expected)
     end
     raise WebhookVerificationError, "The webhook signature does not match." unless valid

@@ -130,8 +130,8 @@ class WebhookTest < Minitest::Test
 
   def test_delayed_payload
     body = '{"type":"email.delivery_delayed","data":{"recipient":"a@yahoo.com","details":{"delayType":"TransientCommunicationFailure","diagnosticCode":"421 4.7.0 [TSS04]","statusCode":"4.7.0"}}}'
-    secret = PREFIX + Base64.strict_encode64("0123456789abcdef0123456789abcdef")
-    sig = Base64.strict_encode64(OpenSSL::HMAC.digest("SHA256", Base64.strict_decode64(secret.delete_prefix(PREFIX)), "whd_1.#{NOW}.#{body}"))
+    secret = PREFIX + ["0123456789abcdef0123456789abcdef"].pack("m0")
+    sig = [OpenSSL::HMAC.digest("SHA256", secret.delete_prefix(PREFIX).unpack1("m0"), "whd_1.#{NOW}.#{body}")].pack("m0")
     event = Vaartix.verify_webhook(body, { "webhook-id" => "whd_1", "webhook-timestamp" => NOW.to_s, "webhook-signature" => "v1,#{sig}" }, secret, now: NOW)
     assert_equal Vaartix::Events::DELIVERY_DELAYED, event["type"]
     assert_equal "421 4.7.0 [TSS04]", event["data"]["details"]["diagnosticCode"]
