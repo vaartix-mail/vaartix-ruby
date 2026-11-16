@@ -20,6 +20,24 @@ jobs:
       - name: Check the tag matches the version
         run: test "${GITHUB_REF_NAME#v}" = "$(ruby -Ilib -e 'require "vaartix/version"; print Vaartix::VERSION')"
       - run: bundle exec rake test
-      - uses: rubygems/configure-rubygems-credentials@v2.1.0
+      # Trusted publishing: swap GitHub's OIDC token for a 15-minute RubyGems push key. Done by hand
+      # because creating a new gem now needs the owning account (`owner`), which the released
+      # configure-rubygems-credentials doesn't send yet. RUBYGEMS_OWNER_ID is a repository
+      # variable (not a secret): the account ID shown on rubygems.org's Pending Trusted Publishers page.
+      - name: Get a RubyGems push key (trusted publishing)
+        env:
+          OWNER: ${{ vars.RUBYGEMS_OWNER_ID }}
+        run: |
+          set -euo pipefail
+          jwt="$(curl -sS --fail-with-body -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=rubygems.org" | jq -r .value)"
+          echo "::add-mask::${jwt}"
+          body="$(jq -n --arg jwt "$jwt" --arg owner "$OWNER" \
+            '{jwt: $jwt} + (if $owner == "" then {} else {owner: $owner} end)')"
+          key="$(curl -sS --fail-with-body -X POST -H 'Content-Type: application/json' -d "$body" \
+            https://rubygems.org/api/v1/oidc/trusted_publisher/exchange_token | jq -r .rubygems_api_key)"
+          test -n "$key" && test "$key" != null
+          echo "::add-mask::${key}"
+          echo "GEM_HOST_API_KEY=${key}" >> "$GITHUB_ENV"
       - run: gem build vaartix.gemspec
       - run: gem push "vaartix-${GITHUB_REF_NAME#v}.gem"
